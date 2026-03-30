@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -181,12 +182,25 @@ def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
                 "messages": messages,
                 "temperature": 0.45,
             }
-            response = requests.post(
-                "https://api.moonshot.ai/v1/chat/completions",
-                json=payload,
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=30,
-            )
+            response = None
+            for rate_attempt in range(4):
+                response = requests.post(
+                    "https://api.moonshot.ai/v1/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=30,
+                )
+                if response.status_code != 429:
+                    break
+                retry_after = response.headers.get("Retry-After", "").strip()
+                wait_seconds = (
+                    float(retry_after)
+                    if retry_after.isdigit()
+                    else 1.5 * (2**rate_attempt)
+                )
+                time.sleep(min(wait_seconds, 20.0))
+            if response is None:
+                return None
             response.raise_for_status()
             body = response.json()
             message = body["choices"][0]["message"]["content"]
