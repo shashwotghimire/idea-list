@@ -87,16 +87,16 @@ export default function App() {
   const canGoNext = filters.offset + filters.limit < total;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <section className="mb-8 space-y-4 rounded-2xl border border-border/70 bg-card/70 p-6 shadow-sm backdrop-blur-sm">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <section className="mb-8 space-y-5 rounded-2xl border border-border/60 bg-card/80 p-6 shadow-lg backdrop-blur-sm sm:p-8">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
-          <Badge variant="secondary">Daily idea feed</Badge>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-wide">Daily idea feed</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-            Discover buildable side project ideas.
+            Build the next practical product.
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-              Curated from Reddit and GitHub, enriched by Kimi, for technical and non-technical audiences.
+              High-signal ideas from Reddit and GitHub, rewritten into clear product opportunities.
           </p>
           </div>
           <ThemeToggle dark={isDark} onToggle={() => setIsDark((prev) => !prev)} />
@@ -161,7 +161,7 @@ export default function App() {
         ) : null}
 
         {!isLoading && !error && ideas.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {ideas.map((idea) => (
               <IdeaCard key={idea.id} idea={idea} onOpen={setSelectedIdea} />
             ))}
@@ -170,7 +170,7 @@ export default function App() {
       </section>
 
       <Dialog open={Boolean(selectedIdea)} onOpenChange={(open) => !open && setSelectedIdea(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           {selectedIdea ? (
             <>
               <DialogHeader>
