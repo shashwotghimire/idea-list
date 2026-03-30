@@ -7,9 +7,23 @@ function sourceLabel(source) {
   return source === "reddit" ? "Reddit" : "GitHub";
 }
 
-export default function IdeaCard({ idea }) {
+export default function IdeaCard({ idea, onOpen }) {
+  const handleOpen = () => onOpen(idea);
+
   return (
-    <Card className="h-full border-white/70 bg-white/75 transition hover:-translate-y-0.5 hover:shadow-md">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleOpen();
+        }
+      }}
+      className="h-full text-left"
+    >
+      <Card className="h-full border-white/50 bg-card/75 transition hover:-translate-y-0.5 hover:shadow-md">
       <CardHeader className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <CardTitle className="text-balance text-xl leading-snug">{idea.title}</CardTitle>
@@ -24,7 +38,7 @@ export default function IdeaCard({ idea }) {
       <CardContent className="space-y-4">
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <UserRound className="h-4 w-4" />
-          <span>{idea.audience || "General builders"}</span>
+          <span>{idea.audience || "Product builders and operators"}</span>
         </p>
 
         <div className="flex flex-wrap gap-2">
@@ -39,12 +53,14 @@ export default function IdeaCard({ idea }) {
           href={idea.source_url}
           target="_blank"
           rel="noreferrer"
+          onClick={(event) => event.stopPropagation()}
           className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           {sourceLabel(idea.source)}
           <ExternalLink className="h-4 w-4" />
         </a>
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

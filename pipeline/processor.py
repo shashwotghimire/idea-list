@@ -7,6 +7,10 @@ from dataclasses import dataclass
 import requests
 
 PROMPT_TEMPLATE = """You are extracting side project ideas from Reddit posts and GitHub repos.
+You must rewrite and improve the idea.
+Do not copy the original title directly; generate a new short title.
+Create tags that can include both technical and non-technical audience signals.
+Audience should be explicit and may include non-technical people such as operators, teachers, coaches, recruiters, creators, or small business owners.
 
 Given the following content, extract a side project idea if one exists.
 If no clear idea exists, return null.
@@ -47,12 +51,12 @@ def _fallback_extract(content: str) -> IdeaCandidate | None:
         return None
     title = cleaned[:56].strip().split(" ")[:8]
     return IdeaCandidate(
-        title=" ".join(title),
+        title=" ".join(title).replace("/", " "),
         problem=cleaned[:180],
-        audience="Makers and indie developers",
-        monetization="Subscription for advanced features.",
+        audience="Indie developers, small business operators, and service professionals",
+        monetization="Subscription with optional premium templates and automation add-ons.",
         difficulty="1-3 months",
-        tags=["saas", "automation"],
+        tags=["automation", "business", "workflow"],
     )
 
 
@@ -103,4 +107,4 @@ def extract_with_kimi(content: str) -> IdeaCandidate | None:
         data = json.loads(message)
         return _validate(data)
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
-        return _fallback_extract(content)
+        return None

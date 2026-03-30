@@ -7,6 +7,7 @@ describe("IdeaCard", () => {
   it("renders title", () => {
     render(
       <IdeaCard
+        onOpen={() => {}}
         idea={{
           id: 1,
           title: "AI Prompt Library",

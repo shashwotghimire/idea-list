@@ -10,32 +10,7 @@ from psycopg.rows import dict_row
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
 ALLOWED_SOURCES = {"reddit", "github"}
 
-DEMO_IDEAS: list[dict] = [
-    {
-        "id": 1,
-        "title": "Feedback Loop for Indie Launches",
-        "problem": "Founders struggle to synthesize launch feedback from scattered channels.",
-        "audience": "Indie founders shipping MVPs",
-        "monetization": "Tiered SaaS subscription.",
-        "difficulty": "1-3 months",
-        "source_url": "https://example.com/demo/feedback-loop",
-        "source": "github",
-        "tags": ["feedback", "analytics", "saas"],
-        "created_at": None,
-    },
-    {
-        "id": 2,
-        "title": "Auto Changelog for Client Work",
-        "problem": "Agencies spend hours writing weekly status updates manually.",
-        "audience": "Freelancers and agencies",
-        "monetization": "Monthly subscription per workspace.",
-        "difficulty": "weekend",
-        "source_url": "https://example.com/demo/auto-changelog",
-        "source": "reddit",
-        "tags": ["automation", "agency", "reporting"],
-        "created_at": None,
-    },
-]
+DEMO_IDEAS: list[dict] = []
 
 
 def _db_url() -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -21,6 +22,16 @@ def main() -> None:
     inserted = 0
     skipped = 0
     for raw in raw_items:
+        parsed = urlparse(raw.source_url)
+        is_valid_source = (
+            raw.source == "reddit"
+            and parsed.netloc.endswith("reddit.com")
+            or raw.source == "github"
+            and parsed.netloc.endswith("github.com")
+        )
+        if not is_valid_source:
+            skipped += 1
+            continue
         if exists_source_url(raw.source_url):
             skipped += 1
             continue

@@ -6,6 +6,14 @@ import IdeaCard from "./components/IdeaCard";
 import SearchBar from "./components/SearchBar";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./components/ui/dialog";
+import ThemeToggle from "./components/ui/theme-toggle";
 
 const INITIAL_FILTERS = {
   search: "",
@@ -23,6 +31,12 @@ export default function App() {
   const [tags, setTags] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedIdea, setSelectedIdea] = useState(null);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  }, [isDark]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,15 +88,18 @@ export default function App() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <section className="mb-8 space-y-4 rounded-2xl border border-white/70 bg-white/65 p-6 shadow-sm backdrop-blur-sm">
-        <div className="space-y-2">
+      <section className="mb-8 space-y-4 rounded-2xl border border-border/70 bg-card/70 p-6 shadow-sm backdrop-blur-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
           <Badge variant="secondary">Daily idea feed</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
             Discover buildable side project ideas.
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-            Curated from Reddit and GitHub, enriched by Kimi, and ready for makers.
+              Curated from Reddit and GitHub, enriched by Kimi, for technical and non-technical audiences.
           </p>
+          </div>
+          <ThemeToggle dark={isDark} onToggle={() => setIsDark((prev) => !prev)} />
         </div>
 
         <SearchBar
@@ -126,7 +143,7 @@ export default function App() {
         </div>
 
         {isLoading ? (
-          <div className="rounded-xl border border-white/70 bg-white/70 p-8 text-center text-muted-foreground">
+          <div className="rounded-xl border border-border/70 bg-card/70 p-8 text-center text-muted-foreground">
             Loading ideas...
           </div>
         ) : null}
@@ -138,7 +155,7 @@ export default function App() {
         ) : null}
 
         {!isLoading && !error && ideas.length === 0 ? (
-          <div className="rounded-xl border border-white/70 bg-white/70 p-8 text-center text-muted-foreground">
+          <div className="rounded-xl border border-border/70 bg-card/70 p-8 text-center text-muted-foreground">
             No ideas match your filters.
           </div>
         ) : null}
@@ -146,11 +163,50 @@ export default function App() {
         {!isLoading && !error && ideas.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {ideas.map((idea) => (
-              <IdeaCard key={idea.id} idea={idea} />
+              <IdeaCard key={idea.id} idea={idea} onOpen={setSelectedIdea} />
             ))}
           </div>
         ) : null}
       </section>
+
+      <Dialog open={Boolean(selectedIdea)} onOpenChange={(open) => !open && setSelectedIdea(null)}>
+        <DialogContent>
+          {selectedIdea ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedIdea.title}</DialogTitle>
+                <DialogDescription>
+                  {selectedIdea.source === "reddit" ? "From Reddit" : "From GitHub"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                <p>{selectedIdea.problem}</p>
+                <p>
+                  <span className="font-medium">Audience:</span> {selectedIdea.audience}
+                </p>
+                <p>
+                  <span className="font-medium">Monetization:</span> {selectedIdea.monetization}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedIdea.tags?.map((tag) => (
+                    <Badge key={tag} variant="outline">
+                      #{tag}
+                    </Badge>
+                  ))}
+                </div>
+                <a
+                  href={selectedIdea.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Open source post/repo
+                </a>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

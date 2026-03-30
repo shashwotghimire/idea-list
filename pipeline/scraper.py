@@ -13,9 +13,30 @@ REDDIT_SUBREDDITS = [
     "startups",
     "webdev",
     "indiehackers",
+    "smallbusiness",
+    "freelance",
+    "EntrepreneurRideAlong",
+    "SaaS",
 ]
 
-GITHUB_TOPICS = ["side-project", "indie", "saas", "tool"]
+GITHUB_TOPICS = [
+    "side-project",
+    "indie",
+    "saas",
+    "productivity",
+    "small-business",
+    "education",
+    "automation",
+]
+GITHUB_QUERIES = [
+    "topic:side-project stars:>30",
+    "topic:saas stars:>30",
+    "topic:productivity stars:>25",
+    "topic:small-business stars:>15",
+    "micro-saas stars:>20",
+    "internal tool stars:>20",
+    "automation tool stars:>20",
+]
 
 
 @dataclass
@@ -74,35 +95,42 @@ def scrape_reddit(min_score: int = 15, per_subreddit: int = 20) -> list[RawItem]
     return items
 
 
-def scrape_github(max_repos: int = 40) -> list[RawItem]:
-    topics = " ".join([f"topic:{topic}" for topic in GITHUB_TOPICS])
+def scrape_github(max_repos: int = 20) -> list[RawItem]:
     date_filter = datetime.now(UTC).strftime("%Y-%m-%d")
-    params = {
-        "q": f"{topics} pushed:>={date_filter}",
-        "sort": "stars",
-        "order": "desc",
-        "per_page": str(max_repos),
-    }
-    data = _safe_get("https://api.github.com/search/repositories", params=params)
-    if not data:
-        return []
     items: list[RawItem] = []
-    for repo in data.get("items", []):
-        name = str(repo.get("full_name") or repo.get("name") or "").strip()
-        desc = str(repo.get("description") or "").strip()
-        url = str(repo.get("html_url") or "").strip()
-        stars = int(repo.get("stargazers_count") or 0)
-        if not name or not url:
+    for query in [
+        *GITHUB_QUERIES,
+        *[f"topic:{topic} stars:>20" for topic in GITHUB_TOPICS],
+    ]:
+        params = {
+            "q": f"{query} pushed:>={date_filter}",
+            "sort": "stars",
+            "order": "desc",
+            "per_page": str(max_repos),
+        }
+        data = _safe_get("https://api.github.com/search/repositories", params=params)
+        if not data:
             continue
-        items.append(
-            RawItem(
-                title=name,
-                content=f"{name}\n\n{desc}".strip(),
-                source_url=url,
-                source="github",
-                score=stars,
+        for repo in data.get("items", []):
+            name = str(repo.get("full_name") or repo.get("name") or "").strip()
+            desc = str(repo.get("description") or "").strip()
+            url = str(repo.get("html_url") or "").strip()
+            stars = int(repo.get("stargazers_count") or 0)
+            topics = repo.get("topics") or []
+            if not name or not url:
+                continue
+            if not url.startswith("https://github.com/"):
+                continue
+            topic_line = ", ".join([str(topic) for topic in topics if topic])
+            items.append(
+                RawItem(
+                    title=name,
+                    content=f"{name}\n\n{desc}\n\nTopics: {topic_line}".strip(),
+                    source_url=url,
+                    source="github",
+                    score=stars,
+                )
             )
-        )
     return items
 
 
@@ -111,21 +139,4 @@ def scrape_all() -> list[RawItem]:
     deduped: dict[str, RawItem] = {
         item.source_url: item for item in scraped if item.source_url
     }
-    if deduped:
-        return list(deduped.values())
-    return [
-        RawItem(
-            title="Feedback Loop for Indie Launches",
-            content="A lightweight tool that collects launch feedback from Reddit and X, clusters it, and suggests product roadmap actions.",
-            source_url="https://example.com/demo/feedback-loop",
-            source="github",
-            score=999,
-        ),
-        RawItem(
-            title="Auto Changelog for Client Work",
-            content="Generate human-readable weekly changelogs from Git commits for agencies and freelancers to send to clients.",
-            source_url="https://example.com/demo/auto-changelog",
-            source="reddit",
-            score=777,
-        ),
-    ]
+    return list(deduped.values())
