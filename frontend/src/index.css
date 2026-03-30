@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: oklch(0.98 0.01 90);
+  --foreground: oklch(0.22 0.03 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.03 250);
+  --primary: oklch(0.56 0.12 201);
+  --primary-foreground: oklch(0.98 0.01 90);
+  --secondary: oklch(0.9 0.03 92);
+  --secondary-foreground: oklch(0.34 0.05 250);
+  --muted: oklch(0.93 0.02 95);
+  --muted-foreground: oklch(0.5 0.03 250);
+  --accent: oklch(0.89 0.05 163);
+  --accent-foreground: oklch(0.26 0.04 220);
+  --destructive: oklch(0.62 0.19 29);
+  --border: oklch(0.86 0.02 95);
+  --input: oklch(0.96 0.01 95);
+  --ring: oklch(0.59 0.13 200);
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Newsreader", "Source Serif 4", ui-serif, Georgia, serif;
+    background-image:
+      radial-gradient(circle at 15% 10%, color-mix(in oklab, var(--accent) 28%, transparent), transparent 40%),
+      radial-gradient(circle at 85% 0%, color-mix(in oklab, var(--primary) 24%, transparent), transparent 38%),
+      linear-gradient(180deg, color-mix(in oklab, var(--muted) 55%, white), var(--background));
+    min-height: 100vh;
+  }
+}
