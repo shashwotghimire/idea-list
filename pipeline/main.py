@@ -39,6 +39,20 @@ def main() -> None:
         if candidate is None:
             skipped += 1
             continue
+        fallback_signature = (
+            candidate.audience.strip().lower()
+            == "indie developers, small business operators, and service professionals"
+            and candidate.monetization.strip().lower()
+            in {
+                "subscription with optional premium templates and automation add-ons.",
+                "subscription for advanced features.",
+            }
+            and [tag.strip().lower() for tag in candidate.tags]
+            == ["automation", "business", "workflow"]
+        )
+        if fallback_signature:
+            skipped += 1
+            continue
         record = IdeaRecord(
             title=candidate.title,
             problem=candidate.problem,

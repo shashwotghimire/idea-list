@@ -197,6 +197,8 @@ def fetch_ideas(
                 )
             ):
                 cleaned_rows.append(row_dict)
+        if not cleaned_rows:
+            return [], 0
         return cleaned_rows, total
     except (OperationalError, PoolTimeout):
         return [], 0

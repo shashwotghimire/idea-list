@@ -348,9 +348,13 @@ def _llm_quality_gate(
             return False
         if parsed.get("accept") is not True:
             return False
-        novelty = int(parsed.get("novelty_score", 0))
-        clarity = int(parsed.get("product_clarity_score", 0))
-        return novelty >= 8 and clarity >= 8
+        novelty_raw = parsed.get("novelty_score")
+        clarity_raw = parsed.get("product_clarity_score")
+        if novelty_raw is None or clarity_raw is None:
+            return True
+        novelty = int(novelty_raw)
+        clarity = int(clarity_raw)
+        return novelty >= 6 and clarity >= 6
     except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
         return False
 
