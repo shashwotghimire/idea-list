@@ -43,7 +43,61 @@ Return ONLY valid JSON, no markdown, no extra text:
   "tags": ["2-4 relevant tags"]
 }"""
 
+VALIDATION_SYSTEM_PROMPT = """You are a strict validation model for startup ideas.
+
+You receive:
+1) A source discussion text
+2) A generated project idea JSON
+
+Accept ONLY if the idea is genuinely transformed and buildable.
+
+Reject if any are true:
+- It is mostly a summary/paraphrase of the source.
+- It refers to source context (post/thread/author/user/shared/reddit/github/repo).
+- Title or problem looks like forum text instead of product concept.
+- Audience is generic or tags are weakly relevant.
+- Difficulty does not match scope.
+
+Return ONLY JSON:
+{
+  "accept": true | false,
+  "reason": "short reason",
+  "novelty_score": 1-10,
+  "product_clarity_score": 1-10
+}"""
+
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
+STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "your",
+    "you",
+    "are",
+    "was",
+    "were",
+    "have",
+    "has",
+    "had",
+    "just",
+    "into",
+    "about",
+    "what",
+    "when",
+    "where",
+    "which",
+    "they",
+    "them",
+    "their",
+    "been",
+    "after",
+    "before",
+    "because",
+}
 
 
 @dataclass
@@ -143,7 +197,56 @@ def _parse_response(content: str) -> dict[str, Any] | None:
             return None
 
 
-def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
+def _tokenize(text: str) -> set[str]:
+    normalized = _normalize_text(text)
+    return {
+        token
+        for token in normalized.split()
+        if len(token) >= 3 and token not in STOPWORDS
+    }
+
+
+def _overlap_ratio(candidate_text: str, source_text: str) -> float:
+    candidate_tokens = _tokenize(candidate_text)
+    source_tokens = _tokenize(source_text)
+    if not candidate_tokens:
+        return 1.0
+    return len(candidate_tokens & source_tokens) / len(candidate_tokens)
+
+
+def _chat_completion(
+    api_key: str, messages: list[dict[str, str]], temperature: float
+) -> str | None:
+    payload = {
+        "model": "moonshot-v1-8k",
+        "messages": messages,
+        "temperature": temperature,
+    }
+    response = None
+    for rate_attempt in range(4):
+        response = requests.post(
+            "https://api.moonshot.ai/v1/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=30,
+        )
+        if response.status_code != 429:
+            break
+        retry_after = response.headers.get("Retry-After", "").strip()
+        wait_seconds = (
+            float(retry_after) if retry_after.isdigit() else 1.5 * (2**rate_attempt)
+        )
+        time.sleep(min(wait_seconds, 20.0))
+    if response is None:
+        return None
+    response.raise_for_status()
+    body = response.json()
+    return body["choices"][0]["message"]["content"]
+
+
+def _validate(
+    data: dict, source_title: str, source_content: str
+) -> IdeaCandidate | None:
     if data.get("skip") is True:
         return None
     difficulty = str(data.get("difficulty") or "").strip()
@@ -166,10 +269,17 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
         return None
     if _looks_like_post_title(title):
         return None
+    if _overlap_ratio(title, source_title) > 0.55:
+        return None
     problem = str(data["problem"]).strip()
     if _is_summary_like_text(problem):
         return None
     if len(problem) < 30 or len(problem) > 240:
+        return None
+    if _overlap_ratio(problem, source_content) > 0.6:
+        return None
+    problem_l = f" {problem.lower()} "
+    if any(pronoun in problem_l for pronoun in [" i ", " my ", " we ", " our "]):
         return None
     audience = str(data["audience"]).strip()
     if _is_invalid_audience(audience):
@@ -184,6 +294,49 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
     )
 
 
+def _llm_quality_gate(
+    api_key: str,
+    source_title: str,
+    source_content: str,
+    candidate: IdeaCandidate,
+) -> bool:
+    candidate_payload = {
+        "title": candidate.title,
+        "problem": candidate.problem,
+        "audience": candidate.audience,
+        "monetization": candidate.monetization,
+        "difficulty": candidate.difficulty,
+        "tags": candidate.tags,
+    }
+    messages = [
+        {"role": "system", "content": VALIDATION_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "source_title": source_title,
+                    "source_content": source_content[:3000],
+                    "candidate": candidate_payload,
+                }
+            ),
+        },
+    ]
+    try:
+        message = _chat_completion(api_key, messages, temperature=0.0)
+        if message is None:
+            return False
+        parsed = _parse_response(message)
+        if not parsed:
+            return False
+        if parsed.get("accept") is not True:
+            return False
+        novelty = int(parsed.get("novelty_score", 0))
+        clarity = int(parsed.get("product_clarity_score", 0))
+        return novelty >= 8 and clarity >= 8
+    except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
+        return False
+
+
 def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
     api_key = os.getenv("KIMI_API_KEY", "").strip()
     if not api_key:
@@ -195,44 +348,21 @@ def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
     ]
     try:
         for attempt in range(2):
-            payload = {
-                "model": "moonshot-v1-8k",
-                "messages": messages,
-                "temperature": 0.45,
-            }
-            response = None
-            for rate_attempt in range(4):
-                response = requests.post(
-                    "https://api.moonshot.ai/v1/chat/completions",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    timeout=30,
-                )
-                if response.status_code != 429:
-                    break
-                retry_after = response.headers.get("Retry-After", "").strip()
-                wait_seconds = (
-                    float(retry_after)
-                    if retry_after.isdigit()
-                    else 1.5 * (2**rate_attempt)
-                )
-                time.sleep(min(wait_seconds, 20.0))
-            if response is None:
+            message = _chat_completion(api_key, messages, temperature=0.45)
+            if message is None:
                 return None
-            response.raise_for_status()
-            body = response.json()
-            message = body["choices"][0]["message"]["content"]
             data = _parse_response(message)
             if data is not None:
-                candidate = _validate(data, source_title)
+                candidate = _validate(data, source_title, content)
                 if candidate is not None:
-                    return candidate
+                    if _llm_quality_gate(api_key, source_title, content, candidate):
+                        return candidate
             if attempt == 0:
                 messages.append({"role": "assistant", "content": message})
                 messages.append(
                     {
                         "role": "user",
-                        "content": "Your previous answer summarized the source or violated format constraints. Rewrite it as a concrete product idea and return only valid JSON.",
+                        "content": "Your previous answer summarized the source or failed quality validation. Rewrite it as a concrete product idea and return only valid JSON.",
                     }
                 )
         return None
