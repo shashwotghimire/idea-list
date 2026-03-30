@@ -106,6 +106,22 @@ def _is_summary_like_text(text: str) -> bool:
     return any(phrase in lowered for phrase in banned_phrases)
 
 
+def _looks_like_post_title(title: str) -> bool:
+    lowered = title.lower().strip()
+    starts = (
+        "am i ",
+        "when do i ",
+        "should i ",
+        "i built ",
+        "i made ",
+        "looking for ",
+        "show me ",
+        "friday share",
+        "help me ",
+    )
+    return lowered.endswith("?") or lowered.startswith(starts)
+
+
 def _is_invalid_audience(audience: str) -> bool:
     lowered = audience.lower().strip()
     banned = {"everyone", "developers", "all users", "anyone"}
@@ -147,6 +163,8 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
     if _is_too_similar_title(title, source_title):
         return None
     if _is_summary_like_text(title):
+        return None
+    if _looks_like_post_title(title):
         return None
     problem = str(data["problem"]).strip()
     if _is_summary_like_text(problem):

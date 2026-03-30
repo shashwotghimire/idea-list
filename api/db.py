@@ -55,6 +55,35 @@ def _is_valid_source_url(source: str, source_url: str) -> bool:
     return False
 
 
+def _looks_like_summary_row(title: str, problem: str) -> bool:
+    title_l = title.lower().strip()
+    problem_l = problem.lower().strip()
+    title_starts = (
+        "am i ",
+        "when do i ",
+        "should i ",
+        "i built ",
+        "i made ",
+        "looking for ",
+        "show me ",
+        "friday share",
+        "help me ",
+    )
+    banned = (
+        "reddit",
+        "post",
+        "thread",
+        "github repo",
+        "the author",
+        "the user",
+        "shared on",
+        "posted on",
+    )
+    if title_l.endswith("?") or title_l.startswith(title_starts):
+        return True
+    return any(token in title_l or token in problem_l for token in banned)
+
+
 @contextmanager
 def _cursor():
     with _pool().connection() as conn:
@@ -138,6 +167,8 @@ def fetch_ideas(
             row_dict.pop("total_count", None)
             if _is_valid_source_url(
                 str(row_dict.get("source", "")), str(row_dict.get("source_url", ""))
+            ) and not _looks_like_summary_row(
+                str(row_dict.get("title", "")), str(row_dict.get("problem", ""))
             ):
                 cleaned_rows.append(row_dict)
         return cleaned_rows, total
@@ -164,6 +195,10 @@ def fetch_idea_by_id(idea_id: int) -> dict | None:
                 return None
             if not _is_valid_source_url(
                 str(row.get("source", "")), str(row.get("source_url", ""))
+            ):
+                return None
+            if _looks_like_summary_row(
+                str(row.get("title", "")), str(row.get("problem", ""))
             ):
                 return None
             return row
