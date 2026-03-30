@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from typing import Any
 
 import requests
 
@@ -27,6 +28,26 @@ Respond ONLY with valid JSON, no explanation, no markdown:
   "monetization": "One realistic way this makes money",
   "difficulty": "one of: weekend, 1-3 months, 6 months",
   "tags": ["2-4 relevant tags"]
+}
+
+Bad output example (reject):
+{
+  "title": "I built a finance app",
+  "problem": "A Reddit user built a finance app and shared results.",
+  "audience": "Developers",
+  "monetization": "Ads",
+  "difficulty": "weekend",
+  "tags": ["reddit", "post"]
+}
+
+Good output example:
+{
+  "title": "Cashflow Coach for Freelancers",
+  "problem": "Freelancers struggle to predict cash gaps between invoices and expenses. This tool forecasts shortfalls and suggests corrective actions.",
+  "audience": "Independent freelancers with irregular income",
+  "monetization": "Monthly subscription with premium forecasting insights",
+  "difficulty": "1-3 months",
+  "tags": ["finance", "freelance", "forecasting"]
 }"""
 
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
@@ -63,6 +84,8 @@ def _is_summary_like_text(text: str) -> bool:
     lowered = text.lower()
     banned_phrases = [
         "i built",
+        "i made",
+        "i created",
         "my project",
         "this post",
         "the post",
@@ -72,8 +95,33 @@ def _is_summary_like_text(text: str) -> bool:
         "on github",
         "reddit post",
         "github repo",
+        "the author",
+        "the user",
+        "shared on",
+        "posted on",
     ]
     return any(phrase in lowered for phrase in banned_phrases)
+
+
+def _is_invalid_audience(audience: str) -> bool:
+    lowered = audience.lower().strip()
+    banned = {"everyone", "developers", "all users", "anyone"}
+    return lowered in banned
+
+
+def _parse_response(content: str) -> dict[str, Any] | None:
+    raw = content.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            return json.loads(raw[start : end + 1])
+        except json.JSONDecodeError:
+            return None
 
 
 def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
@@ -100,10 +148,13 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
         return None
     if len(problem) < 30 or len(problem) > 240:
         return None
+    audience = str(data["audience"]).strip()
+    if _is_invalid_audience(audience):
+        return None
     return IdeaCandidate(
         title=title,
         problem=problem,
-        audience=str(data["audience"]).strip(),
+        audience=audience,
         monetization=str(data["monetization"]).strip(),
         difficulty=difficulty,
         tags=tags,
@@ -115,25 +166,39 @@ def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
     if not api_key:
         return None
     user_prompt = f"Reddit post content:\n\n{content[:6000]}"
-    payload = {
-        "model": "moonshot-v1-8k",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.45,
-    }
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
     try:
-        response = requests.post(
-            "https://api.moonshot.ai/v1/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=30,
-        )
-        response.raise_for_status()
-        body = response.json()
-        message = body["choices"][0]["message"]["content"]
-        data = json.loads(message)
-        return _validate(data, source_title)
-    except (requests.RequestException, ValueError, KeyError, IndexError, TypeError):
+        for attempt in range(2):
+            payload = {
+                "model": "moonshot-v1-8k",
+                "messages": messages,
+                "temperature": 0.45,
+            }
+            response = requests.post(
+                "https://api.moonshot.ai/v1/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            body = response.json()
+            message = body["choices"][0]["message"]["content"]
+            data = _parse_response(message)
+            if data is not None:
+                candidate = _validate(data, source_title)
+                if candidate is not None:
+                    return candidate
+            if attempt == 0:
+                messages.append({"role": "assistant", "content": message})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Your previous answer summarized the source or violated format constraints. Rewrite it as a concrete product idea and return only valid JSON.",
+                    }
+                )
+        return None
+    except (requests.RequestException, KeyError, IndexError, TypeError):
         return None
