@@ -86,6 +86,13 @@ def _is_summary_like_text(text: str) -> bool:
         "i built",
         "i made",
         "i created",
+        "show me your",
+        "let's share",
+        "this is a post",
+        "post about",
+        "shared this",
+        "looking for advice",
+        "feedback on",
         "my project",
         "this post",
         "the post",
@@ -142,6 +149,8 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
     if not 2 <= len(title.split()) <= 6:
         return None
     if _is_too_similar_title(title, source_title):
+        return None
+    if _is_summary_like_text(title):
         return None
     problem = str(data["problem"]).strip()
     if _is_summary_like_text(problem):
