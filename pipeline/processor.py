@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import requests
 
-PROMPT = """You are extracting side project ideas from Reddit posts and GitHub repos.
+PROMPT_TEMPLATE = """You are extracting side project ideas from Reddit posts and GitHub repos.
 
 Given the following content, extract a side project idea if one exists.
 If no clear idea exists, return null.
@@ -25,7 +25,7 @@ If no clear side project idea can be extracted, return:
 { "skip": true }
 
 Content:
-{content}
+__CONTENT__
 """
 
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
@@ -84,11 +84,10 @@ def extract_with_kimi(content: str) -> IdeaCandidate | None:
     api_key = os.getenv("KIMI_API_KEY", "").strip()
     if not api_key:
         return _fallback_extract(content)
+    prompt = PROMPT_TEMPLATE.replace("__CONTENT__", content[:6000])
     payload = {
         "model": "moonshot-v1-8k",
-        "messages": [
-            {"role": "user", "content": PROMPT.format(content=content[:6000])}
-        ],
+        "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
     }
     try:

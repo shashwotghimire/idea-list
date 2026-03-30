@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
 from psycopg import connect
@@ -26,6 +27,22 @@ def _db_url() -> str:
     return url
 
 
+def _connect_kwargs() -> dict[str, object]:
+    os.environ.pop("PGOPTIONS", None)
+    return {"connect_timeout": 8, "options": ""}
+
+
+@contextmanager
+def _conn_cursor(use_dict_row: bool = False):
+    with connect(_db_url(), **_connect_kwargs()) as conn:
+        if use_dict_row:
+            with conn.cursor(row_factory=dict_row) as cur:
+                yield conn, cur
+        else:
+            with conn.cursor() as cur:
+                yield conn, cur
+
+
 def ensure_schema() -> None:
     ddl = """
     CREATE TABLE IF NOT EXISTS ideas (
@@ -41,14 +58,14 @@ def ensure_schema() -> None:
       created_at TIMESTAMP DEFAULT NOW()
     );
     """
-    with connect(_db_url()) as conn, conn.cursor() as cur:
+    with _conn_cursor() as (conn, cur):
         cur.execute(ddl)
         conn.commit()
 
 
 def exists_source_url(source_url: str) -> bool:
     sql = "SELECT 1 FROM ideas WHERE source_url = %s LIMIT 1"
-    with connect(_db_url()) as conn, conn.cursor() as cur:
+    with _conn_cursor() as (_, cur):
         cur.execute(sql, (source_url,))
         return cur.fetchone() is not None
 
@@ -60,7 +77,7 @@ def insert_idea(idea: IdeaRecord) -> int | None:
     ON CONFLICT (source_url) DO NOTHING
     RETURNING id
     """
-    with connect(_db_url()) as conn, conn.cursor(row_factory=dict_row) as cur:
+    with _conn_cursor(use_dict_row=True) as (conn, cur):
         cur.execute(sql, asdict(idea))
         row = cur.fetchone()
         conn.commit()

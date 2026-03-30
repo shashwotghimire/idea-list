@@ -4,9 +4,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pipeline.db import IdeaRecord, ensure_schema, exists_source_url, insert_idea
-from pipeline.processor import extract_with_kimi
-from pipeline.scraper import scrape_all
+try:
+    from .db import IdeaRecord, ensure_schema, exists_source_url, insert_idea
+    from .processor import extract_with_kimi
+    from .scraper import scrape_all
+except ImportError:
+    from db import IdeaRecord, ensure_schema, exists_source_url, insert_idea
+    from processor import extract_with_kimi
+    from scraper import scrape_all
 
 
 def main() -> None:

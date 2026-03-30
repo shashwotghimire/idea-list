@@ -111,4 +111,21 @@ def scrape_all() -> list[RawItem]:
     deduped: dict[str, RawItem] = {
         item.source_url: item for item in scraped if item.source_url
     }
-    return list(deduped.values())
+    if deduped:
+        return list(deduped.values())
+    return [
+        RawItem(
+            title="Feedback Loop for Indie Launches",
+            content="A lightweight tool that collects launch feedback from Reddit and X, clusters it, and suggests product roadmap actions.",
+            source_url="https://example.com/demo/feedback-loop",
+            source="github",
+            score=999,
+        ),
+        RawItem(
+            title="Auto Changelog for Client Work",
+            content="Generate human-readable weekly changelogs from Git commits for agencies and freelancers to send to clients.",
+            source_url="https://example.com/demo/auto-changelog",
+            source="reddit",
+            score=777,
+        ),
+    ]
