@@ -7,47 +7,39 @@ from typing import Any
 
 import requests
 
-SYSTEM_PROMPT = """You are an expert at identifying side project and startup ideas from online discussions.
+SYSTEM_PROMPT = """You are an expert startup ideation model.
 
-You will be given a Reddit post (title + body). Your job is to extract or infer a concrete, buildable side project idea from it.
+Task:
+Convert a Reddit/GitHub source text into ONE new, buildable product idea.
 
-Rules:
-- The idea must be a specific product someone could build - not a summary of the post
-- If the post complains about a problem, turn that problem into a product idea
-- If the post describes something the author built or wishes existed, extract that as the idea
-- If no clear buildable idea can be extracted, return { "skip": true }
-- Never use the Reddit post title as the idea title
-- Never summarize the post - always think "what could someone BUILD because of this?"
+Hard constraints:
+1) DO NOT summarize, paraphrase, or describe what the author posted.
+2) DO NOT mention "post", "reddit", "github", "repo", "author", "user", "thread", or "shared".
+3) DO NOT use first-person phrasing such as "I built", "I made", "my app".
+4) Title must be newly generated and MUST NOT reuse source title wording.
+5) If you cannot infer a concrete product idea, output exactly: { "skip": true }
 
-Respond ONLY with valid JSON, no explanation, no markdown:
+Output intent:
+- Treat the source as signal only.
+- Synthesize a product someone can build next.
+- Write from product perspective, not source perspective.
 
+Quality bar:
+- Title: 2-6 words, product-style name.
+- Problem: 1-2 sentences describing the product's solved pain and core approach.
+- Audience: a specific user segment (never generic terms like everyone/developers).
+- Monetization: one realistic model.
+- Difficulty: weekend | 1-3 months | 6 months.
+- Tags: 2-4 practical tags.
+
+Return ONLY valid JSON, no markdown, no extra text:
 {
-  "title": "Name of the product idea (max 6 words, not the post title)",
-  "problem": "The specific problem this product solves (1-2 sentences)",
-  "audience": "Specific target user - not 'everyone' or 'developers'",
+  "title": "Name of the product idea (max 6 words, not source title)",
+  "problem": "Specific pain solved and the product approach (1-2 sentences)",
+  "audience": "Specific target user segment",
   "monetization": "One realistic way this makes money",
   "difficulty": "one of: weekend, 1-3 months, 6 months",
   "tags": ["2-4 relevant tags"]
-}
-
-Bad output example (reject):
-{
-  "title": "I built a finance app",
-  "problem": "A Reddit user built a finance app and shared results.",
-  "audience": "Developers",
-  "monetization": "Ads",
-  "difficulty": "weekend",
-  "tags": ["reddit", "post"]
-}
-
-Good output example:
-{
-  "title": "Cashflow Coach for Freelancers",
-  "problem": "Freelancers struggle to predict cash gaps between invoices and expenses. This tool forecasts shortfalls and suggests corrective actions.",
-  "audience": "Independent freelancers with irregular income",
-  "monetization": "Monthly subscription with premium forecasting insights",
-  "difficulty": "1-3 months",
-  "tags": ["finance", "freelance", "forecasting"]
 }"""
 
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
@@ -106,6 +98,9 @@ def _is_summary_like_text(text: str) -> bool:
         "the user",
         "shared on",
         "posted on",
+        "thread",
+        "the author posted",
+        "the user posted",
     ]
     return any(phrase in lowered for phrase in banned_phrases)
 
