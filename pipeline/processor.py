@@ -6,35 +6,28 @@ from dataclasses import dataclass
 
 import requests
 
-PROMPT_TEMPLATE = """You are extracting side project ideas from Reddit posts and GitHub repos.
-You must rewrite and improve the idea.
-Do not copy the original post/repo title directly; generate a new project title.
-Do NOT describe the original post/repo itself. Instead, infer and propose a buildable product idea inspired by it.
-Your output must read like a product concept, not a summary of what someone posted.
-Create tags that can include both technical and non-technical audience signals.
-Audience should be explicit and may include non-technical people such as operators, teachers, coaches, recruiters, creators, or small business owners.
+SYSTEM_PROMPT = """You are an expert at identifying side project and startup ideas from online discussions.
 
-Given the following content, extract a side project idea if one exists.
-If no clear idea exists, return null.
+You will be given a Reddit post (title + body). Your job is to extract or infer a concrete, buildable side project idea from it.
 
-Respond ONLY with a valid JSON object in this exact format, nothing else:
+Rules:
+- The idea must be a specific product someone could build - not a summary of the post
+- If the post complains about a problem, turn that problem into a product idea
+- If the post describes something the author built or wishes existed, extract that as the idea
+- If no clear buildable idea can be extracted, return { "skip": true }
+- Never use the Reddit post title as the idea title
+- Never summarize the post - always think "what could someone BUILD because of this?"
+
+Respond ONLY with valid JSON, no explanation, no markdown:
+
 {
-  "title": "new project title (3-8 words, not the original post/repo title)",
-  "problem": "short project description (1 sentence, concise)",
-  "audience": "who this is for (specific, not 'everyone')",
-  "monetization": "how this could make money (1 sentence)",
+  "title": "Name of the product idea (max 6 words, not the post title)",
+  "problem": "The specific problem this product solves (1-2 sentences)",
+  "audience": "Specific target user - not 'everyone' or 'developers'",
+  "monetization": "One realistic way this makes money",
   "difficulty": "one of: weekend, 1-3 months, 6 months",
-  "tags": ["array", "of", "relevant", "tags"]
-}
-
-If no clear side project idea can be extracted, return:
-{ "skip": true }
-
-Reject outputs that look like source summaries, such as: "I built...", "this post...", "the repo...", "on Reddit...", "on GitHub...".
-
-Content:
-__CONTENT__
-"""
+  "tags": ["2-4 relevant tags"]
+}"""
 
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
 
@@ -92,13 +85,13 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
     tags = [
         str(tag).strip().lower() for tag in data.get("tags", []) if str(tag).strip()
     ]
-    if not tags:
+    if not (2 <= len(tags) <= 4):
         return None
     fields = ["title", "problem", "audience", "monetization"]
     if any(not str(data.get(field) or "").strip() for field in fields):
         return None
     title = str(data["title"]).strip()
-    if not 3 <= len(title.split()) <= 8:
+    if not 2 <= len(title.split()) <= 6:
         return None
     if _is_too_similar_title(title, source_title):
         return None
@@ -121,10 +114,13 @@ def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
     api_key = os.getenv("KIMI_API_KEY", "").strip()
     if not api_key:
         return None
-    prompt = PROMPT_TEMPLATE.replace("__CONTENT__", content[:6000])
+    user_prompt = f"Reddit post content:\n\n{content[:6000]}"
     payload = {
         "model": "moonshot-v1-8k",
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
         "temperature": 0.45,
     }
     try:
