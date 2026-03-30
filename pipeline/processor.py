@@ -178,7 +178,22 @@ def _looks_like_post_title(title: str) -> bool:
 
 def _is_invalid_audience(audience: str) -> bool:
     lowered = audience.lower().strip()
-    banned = {"everyone", "developers", "all users", "anyone"}
+    banned = {
+        "everyone",
+        "developers",
+        "all users",
+        "anyone",
+        "indie developers, small business operators, and service professionals",
+    }
+    return lowered in banned
+
+
+def _is_invalid_monetization(monetization: str) -> bool:
+    lowered = monetization.lower().strip()
+    banned = {
+        "subscription with optional premium templates and automation add-ons.",
+        "subscription for advanced features.",
+    }
     return lowered in banned
 
 
@@ -284,11 +299,14 @@ def _validate(
     audience = str(data["audience"]).strip()
     if _is_invalid_audience(audience):
         return None
+    monetization = str(data["monetization"]).strip()
+    if _is_invalid_monetization(monetization):
+        return None
     return IdeaCandidate(
         title=title,
         problem=problem,
         audience=audience,
-        monetization=str(data["monetization"]).strip(),
+        monetization=monetization,
         difficulty=difficulty,
         tags=tags,
     )

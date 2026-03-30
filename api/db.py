@@ -84,6 +84,24 @@ def _looks_like_summary_row(title: str, problem: str) -> bool:
     return any(token in title_l or token in problem_l for token in banned)
 
 
+def _is_fallback_signature(
+    audience: str, monetization: str, tags: list[str] | None
+) -> bool:
+    audience_l = audience.lower().strip()
+    monetization_l = monetization.lower().strip()
+    tags_l = [str(tag).lower().strip() for tag in (tags or [])]
+    return (
+        audience_l
+        == "indie developers, small business operators, and service professionals"
+        and monetization_l
+        in {
+            "subscription with optional premium templates and automation add-ons.",
+            "subscription for advanced features.",
+        }
+        and tags_l == ["automation", "business", "workflow"]
+    )
+
+
 @contextmanager
 def _cursor():
     with _pool().connection() as conn:
@@ -165,10 +183,18 @@ def fetch_ideas(
         for row in rows:
             row_dict = dict(row)
             row_dict.pop("total_count", None)
-            if _is_valid_source_url(
-                str(row_dict.get("source", "")), str(row_dict.get("source_url", ""))
-            ) and not _looks_like_summary_row(
-                str(row_dict.get("title", "")), str(row_dict.get("problem", ""))
+            if (
+                _is_valid_source_url(
+                    str(row_dict.get("source", "")), str(row_dict.get("source_url", ""))
+                )
+                and not _looks_like_summary_row(
+                    str(row_dict.get("title", "")), str(row_dict.get("problem", ""))
+                )
+                and not _is_fallback_signature(
+                    str(row_dict.get("audience", "")),
+                    str(row_dict.get("monetization", "")),
+                    row_dict.get("tags"),
+                )
             ):
                 cleaned_rows.append(row_dict)
         return cleaned_rows, total
@@ -199,6 +225,12 @@ def fetch_idea_by_id(idea_id: int) -> dict | None:
                 return None
             if _looks_like_summary_row(
                 str(row.get("title", "")), str(row.get("problem", ""))
+            ):
+                return None
+            if _is_fallback_signature(
+                str(row.get("audience", "")),
+                str(row.get("monetization", "")),
+                row.get("tags"),
             ):
                 return None
             return row
