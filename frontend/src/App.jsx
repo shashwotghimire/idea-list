@@ -181,11 +181,16 @@ export default function App() {
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <p>{selectedIdea.problem}</p>
+                <p className="text-muted-foreground">
+                  {selectedIdea.monetization
+                    ? `Business angle: ${selectedIdea.monetization}`
+                    : "Potential business angle to be validated."}
+                </p>
                 <p>
                   <span className="font-medium">Audience:</span> {selectedIdea.audience}
                 </p>
                 <p>
-                  <span className="font-medium">Monetization:</span> {selectedIdea.monetization}
+                  <span className="font-medium">Difficulty:</span> {selectedIdea.difficulty}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectedIdea.tags?.map((tag) => (
@@ -200,7 +205,7 @@ export default function App() {
                   rel="noreferrer"
                   className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
                 >
-                  Open source post/repo
+                  Source link ({selectedIdea.source === "reddit" ? "Reddit" : "GitHub"})
                 </a>
               </div>
             </>

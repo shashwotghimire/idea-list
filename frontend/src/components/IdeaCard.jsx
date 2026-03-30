@@ -31,7 +31,7 @@ export default function IdeaCard({ idea, onOpen }) {
             {idea.difficulty}
           </Badge>
         </div>
-        <CardDescription className="line-clamp-3 text-sm leading-relaxed">
+        <CardDescription className="line-clamp-2 text-sm leading-relaxed">
           {idea.problem || "No summary available."}
         </CardDescription>
       </CardHeader>

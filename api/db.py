@@ -3,9 +3,12 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
-from psycopg import connect
+from psycopg import OperationalError
+from psycopg_pool import PoolTimeout
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 ALLOWED_DIFFICULTIES = {"weekend", "1-3 months", "6 months"}
 ALLOWED_SOURCES = {"reddit", "github"}
@@ -22,12 +25,39 @@ def _db_url() -> str:
 
 def _connect_kwargs() -> dict[str, object]:
     os.environ.pop("PGOPTIONS", None)
-    return {"connect_timeout": 8}
+    return {"connect_timeout": 4}
+
+
+_POOL: ConnectionPool | None = None
+
+
+def _pool() -> ConnectionPool:
+    global _POOL
+    if _POOL is None:
+        _POOL = ConnectionPool(
+            conninfo=_db_url(),
+            min_size=1,
+            max_size=6,
+            kwargs=_connect_kwargs(),
+            open=True,
+            timeout=8,
+        )
+    return _POOL
+
+
+def _is_valid_source_url(source: str, source_url: str) -> bool:
+    parsed = urlparse(source_url)
+    host = parsed.netloc.lower()
+    if source == "reddit":
+        return host.endswith("reddit.com")
+    if source == "github":
+        return host.endswith("github.com")
+    return False
 
 
 @contextmanager
 def _cursor():
-    with connect(_db_url(), **_connect_kwargs()) as conn:
+    with _pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             yield cur
 
@@ -86,17 +116,33 @@ def fetch_ideas(
         clauses.append("source = %s")
         params.append(source)
 
-    where_sql = "" if not clauses else f"WHERE {' AND '.join(clauses)}"
+    clauses.append(
+        "((source = 'reddit' AND source_url ILIKE 'https://%%reddit.com/%%') OR (source = 'github' AND source_url ILIKE 'https://github.com/%%'))"
+    )
+    where_sql = f"WHERE {' AND '.join(clauses)}"
     list_sql = (
-        "SELECT id, title, problem, audience, monetization, difficulty, source_url, source, tags, created_at "
+        "SELECT id, title, problem, audience, monetization, difficulty, source_url, source, tags, created_at, COUNT(*) OVER() AS total_count "
         f"FROM ideas {where_sql} "
         "ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
     )
-    with _cursor() as cur:
-        cur.execute(list_sql, [*params, limit, offset])
-        rows = cur.fetchall()
-    total = offset + len(rows)
-    return list(rows), total
+    try:
+        with _cursor() as cur:
+            cur.execute(list_sql, [*params, limit, offset])
+            rows = cur.fetchall()
+        if not rows:
+            return [], 0
+        total = int(rows[0]["total_count"])
+        cleaned_rows = []
+        for row in rows:
+            row_dict = dict(row)
+            row_dict.pop("total_count", None)
+            if _is_valid_source_url(
+                str(row_dict.get("source", "")), str(row_dict.get("source_url", ""))
+            ):
+                cleaned_rows.append(row_dict)
+        return cleaned_rows, total
+    except (OperationalError, PoolTimeout):
+        return [], 0
 
 
 def fetch_idea_by_id(idea_id: int) -> dict | None:
@@ -110,9 +156,19 @@ def fetch_idea_by_id(idea_id: int) -> dict | None:
         "SELECT id, title, problem, audience, monetization, difficulty, source_url, source, tags, created_at "
         "FROM ideas WHERE id = %s"
     )
-    with _cursor() as cur:
-        cur.execute(sql, (idea_id,))
-        return cur.fetchone()
+    try:
+        with _cursor() as cur:
+            cur.execute(sql, (idea_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            if not _is_valid_source_url(
+                str(row.get("source", "")), str(row.get("source_url", ""))
+            ):
+                return None
+            return row
+    except (OperationalError, PoolTimeout):
+        return None
 
 
 def fetch_tags() -> Sequence[str]:
@@ -123,7 +179,10 @@ def fetch_tags() -> Sequence[str]:
         return sorted(tags)
 
     sql = "SELECT DISTINCT unnest(tags) AS tag FROM ideas ORDER BY tag ASC"
-    with _cursor() as cur:
-        cur.execute(sql)
-        rows = cur.fetchall()
-    return [str(row["tag"]) for row in rows if row.get("tag")]
+    try:
+        with _cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+        return [str(row["tag"]) for row in rows if row.get("tag")]
+    except (OperationalError, PoolTimeout):
+        return []

@@ -35,7 +35,7 @@ def main() -> None:
         if exists_source_url(raw.source_url):
             skipped += 1
             continue
-        candidate = extract_with_kimi(raw.content)
+        candidate = extract_with_kimi(raw.title, raw.content)
         if candidate is None:
             skipped += 1
             continue
