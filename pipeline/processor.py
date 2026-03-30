@@ -9,6 +9,8 @@ import requests
 PROMPT_TEMPLATE = """You are extracting side project ideas from Reddit posts and GitHub repos.
 You must rewrite and improve the idea.
 Do not copy the original post/repo title directly; generate a new project title.
+Do NOT describe the original post/repo itself. Instead, infer and propose a buildable product idea inspired by it.
+Your output must read like a product concept, not a summary of what someone posted.
 Create tags that can include both technical and non-technical audience signals.
 Audience should be explicit and may include non-technical people such as operators, teachers, coaches, recruiters, creators, or small business owners.
 
@@ -27,6 +29,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else:
 
 If no clear side project idea can be extracted, return:
 { "skip": true }
+
+Reject outputs that look like source summaries, such as: "I built...", "this post...", "the repo...", "on Reddit...", "on GitHub...".
 
 Content:
 __CONTENT__
@@ -62,19 +66,21 @@ def _is_too_similar_title(generated_title: str, source_title: str) -> bool:
     return g_tokens[:4] == s_tokens[:4]
 
 
-def _fallback_extract(content: str) -> IdeaCandidate | None:
-    cleaned = " ".join(content.split())
-    if len(cleaned) < 40:
-        return None
-    title = cleaned[:56].strip().split(" ")[:8]
-    return IdeaCandidate(
-        title=" ".join(title).replace("/", " "),
-        problem=cleaned[:180],
-        audience="Indie developers, small business operators, and service professionals",
-        monetization="Subscription with optional premium templates and automation add-ons.",
-        difficulty="1-3 months",
-        tags=["automation", "business", "workflow"],
-    )
+def _is_summary_like_text(text: str) -> bool:
+    lowered = text.lower()
+    banned_phrases = [
+        "i built",
+        "my project",
+        "this post",
+        "the post",
+        "this repo",
+        "the repo",
+        "on reddit",
+        "on github",
+        "reddit post",
+        "github repo",
+    ]
+    return any(phrase in lowered for phrase in banned_phrases)
 
 
 def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
@@ -92,11 +98,18 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
     if any(not str(data.get(field) or "").strip() for field in fields):
         return None
     title = str(data["title"]).strip()
+    if not 3 <= len(title.split()) <= 8:
+        return None
     if _is_too_similar_title(title, source_title):
+        return None
+    problem = str(data["problem"]).strip()
+    if _is_summary_like_text(problem):
+        return None
+    if len(problem) < 30 or len(problem) > 240:
         return None
     return IdeaCandidate(
         title=title,
-        problem=str(data["problem"]).strip(),
+        problem=problem,
         audience=str(data["audience"]).strip(),
         monetization=str(data["monetization"]).strip(),
         difficulty=difficulty,
@@ -107,12 +120,12 @@ def _validate(data: dict, source_title: str) -> IdeaCandidate | None:
 def extract_with_kimi(source_title: str, content: str) -> IdeaCandidate | None:
     api_key = os.getenv("KIMI_API_KEY", "").strip()
     if not api_key:
-        return _fallback_extract(content)
+        return None
     prompt = PROMPT_TEMPLATE.replace("__CONTENT__", content[:6000])
     payload = {
         "model": "moonshot-v1-8k",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
+        "temperature": 0.45,
     }
     try:
         response = requests.post(
